@@ -37,7 +37,7 @@ services:
       - ./config/chirpstack:/etc/chirpstack
     ports:
       - "8080:8080"
-    entrypoint: ["/etc/chirpstack/init.sh"]
+    command: ["/bin/bash", "/etc/chirpstack/init.sh"]
     networks:
       - chirpstack-net
 
