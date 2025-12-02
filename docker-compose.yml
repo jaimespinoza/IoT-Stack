@@ -1,0 +1,60 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: chirpstack-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: chirpstack
+      POSTGRES_PASSWORD: chirpstack
+      POSTGRES_DB: chirpstack
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data
+    networks:
+      - chirpstack-net
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: chirpstack-mosquitto
+    restart: always
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./volumes/mosquitto/config:/mosquitto/config
+      - ./volumes/mosquitto/data:/mosquitto/data
+      - ./volumes/mosquitto/log:/mosquitto/log
+    networks:
+      - chirpstack-net
+
+  chirpstack:
+    image: chirpstack/chirpstack:4
+    container_name: chirpstack
+    restart: always
+    depends_on:
+      - postgres
+      - mosquitto
+    volumes:
+      - ./config/chirpstack:/etc/chirpstack
+    ports:
+      - "8080:8080"
+    entrypoint: ["/etc/chirpstack/init.sh"]
+    networks:
+      - chirpstack-net
+
+  telegraf:
+    image: telegraf:1.34
+    container_name: chirpstack-telegraf
+    restart: always
+    depends_on:
+      - mosquitto
+    volumes:
+      - ./config/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - ./config/telegraf/starlark_processor.star:/etc/telegraf/starlark_processor.star:ro
+    networks:
+      - chirpstack-net
+
+networks:
+  chirpstack-net:
+    driver: bridge
