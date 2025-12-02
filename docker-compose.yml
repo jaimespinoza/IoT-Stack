@@ -35,6 +35,7 @@ services:
       - mosquitto
     volumes:
       - ./config/chirpstack:/etc/chirpstack
+    command: ["--config", "/etc/chirpstack"]
     ports:
       - "8080:8080"
     networks:

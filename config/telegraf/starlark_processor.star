@@ -2,14 +2,24 @@
   namepass = ["mqtt_consumer"]
   source = '''
 def apply(metric):
-    import json,time
-
-    raw = metric.get_string("payload")
+    raw = metric.fields.get("payload")
     if not raw:
         return None
 
+    # intentar parsear JSON manualmente (solo objetos simples)
     try:
-        p = json.loads(raw)
+        raw = raw.strip()
+        # quitar { } inicial y final
+        if raw.startswith("{") and raw.endswith("}"):
+            raw = raw[1:-1]
+
+        p = {}
+        for pair in raw.split(","):
+            if ":" in pair:
+                k,v = pair.split(":",1)
+                k = k.strip().strip('"')
+                v = v.strip().strip('"')
+                p[k] = v
     except:
         return None
 
@@ -22,45 +32,30 @@ def apply(metric):
     def esc(v):
         return str(v).strip()
 
-    # timestamp desde p.time
-    try:
-        ts = int(time.mktime(time.strptime(p.get("time"), "%Y-%m-%dT%H:%M:%SZ")))
-        metric.time = ts * 1000000000
-    except:
-        pass
-
     # tags base
-    app = p.get("deviceInfo", {}).get("applicationName", "unknown")
+    app = p.get("deviceInfo_applicationName", "unknown")
     tags["application"] = esc(app)
-    tags["deviceName"] = esc(p.get("deviceInfo", {}).get("deviceName", ""))
-    tags["devEUI"] = esc(p.get("deviceInfo", {}).get("devEui", p.get("devEUI","")))
+    tags["deviceName"] = esc(p.get("deviceInfo_deviceName", ""))
+    tags["devEUI"] = esc(p.get("deviceInfo_devEui", p.get("devEUI","")))
 
     # measurement = applicationName
     metric.name = esc(app)
 
-    # procesar valores en p.object
-    for k,v in p["object"].items():
-        if v in ["True","true"]: v = 1
-        elif v in ["False","false"]: v = 0
-        elif v == "LOW": v = 0
-        elif v == "HIGH": v = 1
-        elif isinstance(v,str):
-            try:
-                num=float(v)
-                v=num
-            except:
-                fields[k]=v
-                continue
+    # procesar valores en object (aun como string)
+    obj_prefix = "object_"
+    for k,v in p.items():
+        if k.startswith(obj_prefix):
+            key = k[len(obj_prefix):]
+            val = v
+            if val in ["True","true","HIGH"]:
+                val = 1
+            elif val in ["False","false","LOW"]:
+                val = 0
+            else:
+                try:
+                    val = float(val)
+                except:
+                    pass
+            fields[key] = val
 
-        if isinstance(v,(int,float)):
-            fields[k]=v
-
-    # aplicar tags y fields
-    for k,v in tags.items():
-        metric.tags[k]=v
-
-    for k,v in fields.items():
-        metric.fields[k]=v
-
-    return metric
-'''
+    # aplicar
