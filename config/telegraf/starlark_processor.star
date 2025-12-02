@@ -3,7 +3,7 @@
   source = '''
 def apply(metric):
     import json,time
-    
+
     raw = metric.get_string("payload")
     if not raw:
         return None
