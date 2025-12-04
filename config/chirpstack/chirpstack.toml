@@ -6,6 +6,9 @@
   # Options are: trace, debug, info, warn error.
   level="info"
 
+[api.logging]
+enabled=false 
+
 
 # PostgreSQL configuration.
 [postgresql]
@@ -39,18 +42,18 @@
   # Server address or addresses.
   #
   # Set multiple addresses when connecting to a cluster.
-  #servers=[
-  #  "redis://$REDIS_HOST/",
-  #]
+  servers=[
+    "redis://$REDIS_HOST/",
+  ]
 
   # TLS enabled.
-  #tls_enabled=false
+  tls_enabled=false
 
   # Redis Cluster.
   #
   # Set this to true when the provided URLs are pointing to a Redis Cluster
   # instance.
-  #cluster=false
+  cluster=false
 
 
 # Network related configuration.

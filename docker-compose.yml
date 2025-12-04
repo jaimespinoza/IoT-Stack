@@ -1,59 +1,96 @@
 services:
-  postgres:
-    image: postgres:15
-    container_name: chirpstack-postgres
-    restart: always
-    environment:
-      POSTGRES_USER: chirpstack
-      POSTGRES_PASSWORD: chirpstack
-      POSTGRES_DB: chirpstack
-    volumes:
-      - ./configuration/postgresql/initdb:/docker-entrypoint-initdb.d
-      - ./volumes/postgres:/var/lib/postgresql/data
-    networks:
-      - chirpstack-net
-
-  mosquitto:
-    image: eclipse-mosquitto:2.0
-    container_name: chirpstack-mosquitto
-    restart: always
-    ports:
-      - "1883:1883"
-      - "9001:9001"
-    volumes:
-      - ./volumes/mosquitto/config:/mosquitto/config
-      - ./volumes/mosquitto/data:/mosquitto/data
-      - ./volumes/mosquitto/log:/mosquitto/log
-    networks:
-      - chirpstack-net
-
   chirpstack:
     image: chirpstack/chirpstack:4
-    container_name: chirpstack
-    restart: always
-    depends_on:
-      - postgres
-      - mosquitto
+    command: -c /etc/chirpstack
+    restart: unless-stopped
     volumes:
       - ./config/chirpstack:/etc/chirpstack
-    command: ["--config", "/etc/chirpstack"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      - MQTT_BROKER_HOST=mosquitto
+      - REDIS_HOST=redis
+      - POSTGRESQL_HOST=postgres
     ports:
       - "8080:8080"
-    networks:
-      - chirpstack-net
 
+  chirpstack-gateway-bridge:
+    image: chirpstack/chirpstack-gateway-bridge:4
+    restart: unless-stopped
+    ports:
+      - "1700:1700/udp"
+    volumes:
+      - ./config/chirpstack-gateway-bridge:/etc/chirpstack-gateway-bridge
+    environment:
+      - INTEGRATION__MQTT__EVENT_TOPIC_TEMPLATE=au915_4/gateway/{{ .GatewayID }}/event/{{ .EventType }}
+      - INTEGRATION__MQTT__STATE_TOPIC_TEMPLATE=au915_4/gateway/{{ .GatewayID }}/state/{{ .StateType }}
+      - INTEGRATION__MQTT__COMMAND_TOPIC_TEMPLATE=au915_4/gateway/{{ .GatewayID }}/command/#
+    depends_on:
+      - mosquitto
+
+  chirpstack-gateway-bridge-basicstation:
+    image: chirpstack/chirpstack-gateway-bridge:4
+    restart: unless-stopped
+    command: -c /etc/chirpstack-gateway-bridge/chirpstack-gateway-bridge-basicstation-au915_4.toml
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./config/chirpstack-gateway-bridge:/etc/chirpstack-gateway-bridge
+    depends_on:
+      - mosquitto
+  chirpstack-rest-api:
+    image: chirpstack/chirpstack-rest-api:4
+    restart: unless-stopped
+    command: --server chirpstack:8080 --bind 0.0.0.0:8090 --insecure
+    ports:
+      - "8090:8090"
+    depends_on:
+      - chirpstack
+
+  postgres:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    volumes:
+      - ./config/postgresql/initdb:/docker-entrypoint-initdb.d
+      - postgresqldata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=chirpstack
+      - POSTGRES_PASSWORD=chirpstack
+      - POSTGRES_DB=chirpstack
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chirpstack"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 300 1 --save 60 100 --appendonly no
+    volumes:
+      - redisdata:/data
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./config/mosquitto/config/:/mosquitto/config/
   telegraf:
     image: telegraf:1.34
-    container_name: chirpstack-telegraf
-    restart: always
+    restart: unless-stopped
     depends_on:
       - mosquitto
     volumes:
       - ./config/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
       - ./config/telegraf/starlark_processor.star:/etc/telegraf/starlark_processor.star:ro
-    networks:
-      - chirpstack-net
 
-networks:
-  chirpstack-net:
-    driver: bridge
+volumes:
+  postgresqldata:
+  redisdata:

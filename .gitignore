@@ -1,0 +1,15 @@
+﻿# Logs
+*.log
+
+# Docker
+**/docker-compose.override.yml
+**/volumes/
+**/tmp/
+**/build/
+**/node_modules/
+
+# Env
+*.env
+.env.local
+
+
